@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion-Based Music Recommendation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f0f0f0;
+        }
+        video {
+            border: 2px solid #333;
+            margin: 20px;
+        }
+        #emotion, #music {
+            font-size: 24px;
+            margin: 10px;
+        }
+        #youtube-player {
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: none; /* Hidden by default */
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Emotion-Based Music Recommendation</h1>
+    <video id="video" width="640" height="480" autoplay></video>
+    <div id="emotion">Emotion: None</div>
+    <div id="music">Music Recommendation: None</div>
+    <iframe id="youtube-player" width="640" height="360" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+    <button id="restart-btn" onclick="restartDetection()">Restart Detection</button>
+
+    <script>
+        const video = document.getElementById('video');
+        const emotionDiv = document.getElementById('emotion');
+        const musicDiv = document.getElementById('music');
+        const youtubePlayer = document.getElementById('youtube-player');
+        const restartBtn = document.getElementById('restart-btn');
+        let detectionInterval = null;
+
+        // Access webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing webcam: ", err);
+            });
+
+        // Function to capture frame and detect emotion
+        function captureFrame() {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                const formData = new FormData();
+                formData.append('image', blob, 'frame.jpg');
+
+                fetch('/detect_emotion', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    emotionDiv.textContent = `Emotion: ${data.emotion}`;
+                    musicDiv.textContent = `Music Recommendation: ${data.music}`;
+
+                    if (data.video_id && data.emotion !== 'No Faces' && data.emotion !== 'Error') {
+                        const youtubeUrl = `https://www.youtube.com/embed/${data.video_id}?autoplay=1&mute=1`;
+                        youtubePlayer.src = youtubeUrl;
+                        stopDetection();
+                        restartBtn.style.display = 'block';
+                    } else {
+                        youtubePlayer.src = '';
+                    }
+                })
+                .catch(err => {
+                    console.error("Error detecting emotion: ", err);
+                    emotionDiv.textContent = 'Emotion: Error';
+                    musicDiv.textContent = 'Music Recommendation: Error';
+                });
+            }, 'image/jpeg');
+        }
+
+        // Start detection every 5 seconds
+        function startDetection() {
+            if (!detectionInterval) {
+                detectionInterval = setInterval(captureFrame, 5000);
+            }
+        }
+
+        // Stop detection
+        function stopDetection() {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+        }
+
+        // Restart detection
+        function restartDetection() {
+            stopDetection();
+            youtubePlayer.src = '';
+            emotionDiv.textContent = 'Emotion: None';
+            musicDiv.textContent = 'Music Recommendation: None';
+            restartBtn.style.display = 'none';
+            startDetection();
+        }
+
+        // Initial start
+        startDetection();
+        setTimeout(captureFrame, 1000);
+    </script>
+</body>
+</html>
